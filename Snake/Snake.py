@@ -17,14 +17,14 @@ red = (255, 0, 0)
 gray = (128, 128, 128)
 
 # 定义贪吃蛇的初始位置和长度
-snake_block = 20
+snake_block = 30  # 将网格大小从 20 增大到 30
 snake_speed = 10
 snake_list = []
 snake_length = 1  # 初始长度设为1
 
 # 生成随机初始位置
-x1 = round(random.randrange(0, window_width - 200 - snake_block) / 20.0) * 20.0
-y1 = round(random.randrange(0, window_height - snake_block) / 20.0) * 20.0
+x1 = round(random.randrange(0, window_width - 200 - snake_block) / 30.0) * 30.0
+y1 = round(random.randrange(0, window_height - snake_block) / 30.0) * 30.0
 
 # 初始方向
 x1_change = 0
@@ -54,7 +54,7 @@ def draw_grid():
 
 
 def display_controls():
-    font = pygame.font.SysFont(None, 24)
+    font = pygame.font.Font(None, 24)  # 使用 Pygame 内置字体
     control_text = font.render("Controls:", True, white)
     left_arrow = font.render("Left Arrow", True, white)
     right_arrow = font.render("Right Arrow", True, white)
@@ -70,7 +70,7 @@ def display_controls():
 
 
 def display_score_and_level(high_score_all_time):
-    font = pygame.font.SysFont(None, 24)
+    font = pygame.font.Font(None, 24)  # 使用 Pygame 内置字体
 
     # 计算文本的宽度
     score_text = font.render(f"Score: {score}", True, white)
@@ -111,8 +111,8 @@ def generate_food(snake_list, num_foods):
     food_list = []
     for _ in range(num_foods):
         while True:
-            foodx = round(random.randrange(0, window_width - 200 - snake_block) / 20.0) * 20.0
-            foody = round(random.randrange(0, window_height - snake_block) / 20.0) * 20.0
+            foodx = round(random.randrange(0, window_width - 200 - snake_block) / 30.0) * 30.0
+            foody = round(random.randrange(0, window_height - snake_block) / 30.0) * 30.0
             if [foodx, foody] not in snake_list and [foodx, foody] not in food_list:
                 food_list.append([foodx, foody])
                 break
@@ -224,10 +224,10 @@ def game_loop():
             clock.tick(snake_speed)
 
         else:  # 当游戏暂停时
-            # 清屏并绘制背景...
+            # 清屏并绘制背景
             window.fill(black)
 
-            # 绘制网格、控制信息、得分和等级...
+            # 绘制网格、控制信息、得分和等级
             draw_grid()
             display_controls()
             display_score_and_level(high_score_all_time)
@@ -240,7 +240,7 @@ def game_loop():
             draw_snake(snake_list)
 
             # 显示“PAUSED”提示
-            font = pygame.font.SysFont(None, 48)  # 设置字体大小为48
+            font = pygame.font.Font(None, 48)
             pause_text = font.render("PAUSED", True, white)
             window.blit(pause_text, (window_width // 2 - 50, window_height // 2 - 24))  # 屏幕中心显示
 
@@ -255,7 +255,7 @@ def game_over_screen():
     global score, high_score_all_time, running
 
     # 显示游戏结束信息
-    font = pygame.font.SysFont(None, 48)
+    font = pygame.font.Font(None, 48)  # 使用具体的字体名称
     game_over_text = font.render("Game Over", True, white)
     restart_text = font.render("Press R to Restart | Press Q to Exit", True, white)
     waiting_for_input = True
@@ -274,7 +274,7 @@ def game_over_screen():
                     waiting_for_input = False
                     running = False
 
-        # 清屏并绘制背景...
+        # 清屏并绘制背景
         window.fill(black)
         draw_grid()
         display_controls()
@@ -293,8 +293,8 @@ def game_over_screen():
 
 def reset_game():
     global x1, y1, x1_change, y1_change, snake_list, snake_length, score, level, game_over, paused, food_list
-    x1 = round(random.randrange(0, window_width - 200 - snake_block) / 20.0) * 20.0
-    y1 = round(random.randrange(0, window_height - snake_block) / 20.0) * 20.0
+    x1 = round(random.randrange(0, window_width - 200 - snake_block) / 30.0) * 30.0
+    y1 = round(random.randrange(0, window_height - snake_block) / 30.0) * 30.0
     x1_change = 0
     y1_change = 0
     food_list = generate_food(snake_list, min(level, 10))
@@ -311,7 +311,7 @@ def display_initial_screen():
         "Welcome to Snake Game",
         "Press Space to Start"
     ]
-    font = pygame.font.SysFont(None, 48)
+    font = pygame.font.Font(None, 48)
 
     waiting_for_input = True
     while waiting_for_input:
@@ -334,19 +334,19 @@ def display_initial_screen():
         pygame.display.update()
         clock.tick(10)  # 减慢帧率，防止闪烁
 
+    # 返回 True 表示用户已经按下空格键
+    return True
+
 
 high_score_all_time = get_high_score_from_file()  # 从文件中读取历史最高分
 
 # 主循环
 running = True
-while running:
-    display_initial_screen()  # 显示初始屏幕
-    game_loop()
-    if game_over:
-        save_score_to_file(score)
-        high_score_all_time = max(high_score_all_time, score)
-        game_over_screen()
 
-# 退出 Pygame
-pygame.quit()
-quit()
+# 显示初始屏幕
+if display_initial_screen():
+    game_loop()  # 用户按下空格键后开始游戏循环
+
+# 游戏结束后处理
+if game_over:
+    game_over_screen()
