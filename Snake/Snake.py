@@ -7,6 +7,8 @@ pygame.init()
 # 设置窗口大小
 window_width = 1000
 window_height = 800
+play_area_width = window_width - 200  # 游戏区域宽度
+info_panel_width = 200  # 信息面板宽度
 window = pygame.display.set_mode((window_width, window_height))
 pygame.display.set_caption('Snake')
 
@@ -16,337 +18,250 @@ black = (0, 0, 0)
 red = (255, 0, 0)
 gray = (128, 128, 128)
 
-# 定义贪吃蛇的初始位置和长度
-snake_block = 30  # 将网格大小从 20 增大到 30
-snake_speed = 10
-snake_list = []
-snake_length = 1  # 初始长度设为1
+class Snake:
+    def __init__(self, x, y, block_size):
+        self.block_size = block_size
+        self.body = [[x, y]]
+        self.directions = {'UP': (0, -block_size), 'DOWN': (0, block_size), 'LEFT': (-block_size, 0), 'RIGHT': (block_size, 0)}
+        self.current_direction = None  # 初始化为 None
+        self.grow = False
 
-# 生成随机初始位置
-x1 = round(random.randrange(0, window_width - 200 - snake_block) / 30.0) * 30.0
-y1 = round(random.randrange(0, window_height - snake_block) / 30.0) * 30.0
+    def move(self):
+        if self.current_direction is None:
+            return  # 如果当前方向为 None，则不移动
+        dx, dy = self.directions[self.current_direction]
+        new_head = [self.body[-1][0] + dx, self.body[-1][1] + dy]
+        if self.grow:
+            self.body.append(new_head)
+            self.grow = False
+        else:
+            self.body.pop(0)
+            self.body.append(new_head)
 
-# 初始方向
-x1_change = 0
-y1_change = 0
+    def change_direction(self, direction):
+        opposite_direction = {'UP': 'DOWN', 'DOWN': 'UP', 'LEFT': 'RIGHT', 'RIGHT': 'LEFT'}
+        if direction != opposite_direction.get(self.current_direction, None):
+            self.current_direction = direction
 
-# 生成食物
-food_list = []
+    def grow_snake(self):
+        self.grow = True
 
-# 得分和等级
-score = 0
-level = 1
-
-# 游戏循环
-clock = pygame.time.Clock()
-game_over = False
-paused = False  # 用于跟踪游戏是否暂停
-
-# 初始化贪吃蛇的位置
-snake_list = [[x1, y1]]
-
-
-def draw_grid():
-    for x in range(0, window_width - 200, snake_block):
-        pygame.draw.line(window, gray, (x, 0), (x, window_height))
-    for y in range(0, window_height, snake_block):
-        pygame.draw.line(window, gray, (0, y), (window_width - 200, y))
-
-
-def display_controls():
-    font = pygame.font.Font(None, 24)  # 使用 Pygame 内置字体
-    control_text = font.render("Controls:", True, white)
-    left_arrow = font.render("Left Arrow", True, white)
-    right_arrow = font.render("Right Arrow", True, white)
-    up_arrow = font.render("Up Arrow", True, white)
-    down_arrow = font.render("Down Arrow", True, white)
-
-    # 显示控制信息
-    window.blit(control_text, (window_width - 180, 20))
-    window.blit(left_arrow, (window_width - 180, 40))
-    window.blit(right_arrow, (window_width - 180, 60))
-    window.blit(up_arrow, (window_width - 180, 80))
-    window.blit(down_arrow, (window_width - 180, 100))
+    def check_collision(self, play_area_width, window_height):
+        head = self.body[-1]
+        if (head[0] < 0 or head[0] >= play_area_width or
+                head[1] < 0 or head[1] >= window_height or
+                head in self.body[:-1]):
+            return True
+        return False
 
 
-def display_score_and_level(high_score_all_time):
-    font = pygame.font.Font(None, 24)  # 使用 Pygame 内置字体
+class Food:
+    def __init__(self, snake_body, block_size, play_area_width, window_height, level):
+        self.block_size = block_size
+        self.play_area_width = play_area_width
+        self.window_height = window_height
+        self.foods = self.generate_foods(snake_body, min(level, 10))  # 根据level生成食物，但不超过10个
 
-    # 计算文本的宽度
-    score_text = font.render(f"Score: {score}", True, white)
-    level_text = font.render(f"Level: {level}", True, white)
-    high_score_text = font.render(f"High Score (All Time): {high_score_all_time}", True, white)
-
-    # 获取文本的宽度
-    score_text_width = score_text.get_width()
-    level_text_width = level_text.get_width()
-    high_score_text_width = high_score_text.get_width()
-
-    # 计算文本的显示位置，确保它们不会超出屏幕
-    score_x = window_width - 180
-    level_x = window_width - 180
-    high_score_x = window_width - high_score_text_width - 20  # 确保高分文本不会超出屏幕
-
-    # 显示得分、等级和历史最高得分
-    window.blit(score_text, (score_x, 140))
-    window.blit(level_text, (level_x, 160))
-    window.blit(high_score_text, (high_score_x, 180))
+    def generate_foods(self, snake_body, num_foods):
+        foods = []
+        while len(foods) < num_foods:
+            food_x = round(random.randrange(0, self.play_area_width - self.block_size) / self.block_size) * self.block_size
+            food_y = round(random.randrange(0, self.window_height - self.block_size) / self.block_size) * self.block_size
+            if [food_x, food_y] not in snake_body and [food_x, food_y] not in foods:  # 确保新食物不在蛇身上也不与其他食物重叠
+                foods.append([food_x, food_y])
+        return foods
 
 
-def get_high_score_from_file():
-    try:
-        with open('scores_for_snake.txt', 'r') as file:
-            scores = [int(line.strip()) for line in file.readlines()]
-            return max(scores, default=0)
-    except FileNotFoundError:
-        return 0
+class Scoreboard:
+    def __init__(self, high_score_all_time):
+        self.score = 0
+        self.high_score_all_time = high_score_all_time
+        self.level = 1
+
+    def update_score(self, points):
+        self.score += points
+        if self.score % 100 == 0:
+            self.level += 1
+
+    def get_high_score_from_file(self):
+        try:
+            with open('scores_for_snake.txt', 'r') as file:
+                scores = [int(line.strip()) for line in file.readlines()]
+                return max(scores, default=0)
+        except FileNotFoundError:
+            return 0
+
+    def save_score_to_file(self, score):
+        with open('scores_for_snake.txt', 'a') as file:
+            file.write(f"{score}\n")
 
 
-def save_score_to_file(score):
-    with open('scores_for_snake.txt', 'a') as file:
-        file.write(f"{score}\n")
+class Game:
+    def __init__(self, window, play_area_width, window_height, info_panel_width, block_size, snake_speed):
+        self.window = window
+        self.play_area_width = play_area_width
+        self.window_height = window_height
+        self.info_panel_width = info_panel_width
+        self.block_size = block_size
+        self.snake_speed = snake_speed
+        self.clock = pygame.time.Clock()
+        self.game_over = False
+        self.paused = False
+        self.started = False  # 玩家按下方向键后开始游戏
+        self.snake = Snake(self.round_to_grid(play_area_width // 2), self.round_to_grid(window_height // 2), block_size)
+        self.scoreboard = Scoreboard(self.get_high_score_from_file())
+        self.food = Food(self.snake.body, self.block_size, self.play_area_width, self.window_height, self.scoreboard.level)  # 传入初始level
 
+    def round_to_grid(self, value):
+        return round(value / self.block_size) * self.block_size
 
-def generate_food(snake_list, num_foods):
-    food_list = []
-    for _ in range(num_foods):
-        while True:
-            foodx = round(random.randrange(0, window_width - 200 - snake_block) / 30.0) * 30.0
-            foody = round(random.randrange(0, window_height - snake_block) / 30.0) * 30.0
-            if [foodx, foody] not in snake_list and [foodx, foody] not in food_list:
-                food_list.append([foodx, foody])
-                break
-    return food_list
+    def draw_grid(self):
+        for x in range(0, self.play_area_width, self.block_size):
+            pygame.draw.line(self.window, gray, (x, 0), (x, self.window_height))
+        for y in range(0, self.window_height, self.block_size):
+            pygame.draw.line(self.window, gray, (0, y), (self.play_area_width, y))
 
+    def display_controls(self):
+        font = pygame.font.Font(None, 24)
+        control_text = font.render("Controls:", True, white)
+        left_arrow = font.render("Left Arrow", True, white)
+        right_arrow = font.render("Right Arrow", True, white)
+        up_arrow = font.render("Up Arrow", True, white)
+        down_arrow = font.render("Down Arrow", True, white)
+        self.window.blit(control_text, (self.play_area_width + 20, 20))
+        self.window.blit(left_arrow, (self.play_area_width + 20, 40))
+        self.window.blit(right_arrow, (self.play_area_width + 20, 60))
+        self.window.blit(up_arrow, (self.play_area_width + 20, 80))
+        self.window.blit(down_arrow, (self.play_area_width + 20, 100))
 
-def update_snake_position(snake_list, x1, y1, x1_change, y1_change):
-    # 更新贪吃蛇的位置
-    if x1_change != 0 or y1_change != 0:  # 只有当方向改变时才更新位置
-        x1 += x1_change
-        y1 += y1_change
+    def display_score_and_level(self):
+        font = pygame.font.Font(None, 24)
+        score_text = font.render(f"Score: {self.scoreboard.score}", True, white)
+        level_text = font.render(f"Level: {self.scoreboard.level}", True, white)
+        high_score_text = font.render(f"High Score (All Time): {self.scoreboard.high_score_all_time}", True, white)
+        self.window.blit(score_text, (self.play_area_width + 20, 140))
+        self.window.blit(level_text, (self.play_area_width + 20, 160))
+        self.window.blit(high_score_text, (self.play_area_width + 5, 180))
 
-    # 检查是否撞墙
-    if x1 >= window_width - 200 or x1 < 0 or y1 >= window_height or y1 < 0:
-        return x1, y1, True
+    def run(self):
+        while not self.game_over:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.game_over = True
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_LEFT:
+                        self.snake.change_direction('LEFT')
+                        self.started = True
+                    elif event.key == pygame.K_RIGHT:
+                        self.snake.change_direction('RIGHT')
+                        self.started = True
+                    elif event.key == pygame.K_UP:
+                        self.snake.change_direction('UP')
+                        self.started = True
+                    elif event.key == pygame.K_DOWN:
+                        self.snake.change_direction('DOWN')
+                        self.started = True
+                    elif event.key == pygame.K_p:
+                        self.paused = not self.paused
 
-    # 更新贪吃蛇的位置
-    snake_head = [x1, y1]
-    snake_list.append(snake_head)
+            if not self.paused and self.started:
+                self.snake.move()
+                if self.snake.check_collision(self.play_area_width, self.window_height):
+                    self.game_over = True
 
-    if len(snake_list) > snake_length:
-        del snake_list[0]
+                # 检查蛇是否吃到食物
+                for food_pos in self.food.foods:
+                    if self.snake.body[-1] == food_pos:
+                        self.snake.grow_snake()
+                        self.scoreboard.update_score(10)
+                        self.food.foods.remove(food_pos)  # 移除被吃掉的食物
+                        break
 
-    # 检查是否撞到自己
-    for segment in snake_list[:-1]:
-        if segment == snake_head:
-            return x1, y1, True
-
-    return x1, y1, False
-
-
-def draw_snake(snake_list):
-    for segment in snake_list:
-        pygame.draw.rect(window, white, [segment[0], segment[1], snake_block, snake_block])
-
-
-def game_loop():
-    global x1, y1, x1_change, y1_change, snake_list, snake_length, score, level, game_over, paused, food_list
-
-    # 初始化 snake_speed
-    snake_speed = 10  # 你可以根据需要调整这个初始值
-
-    # 生成初始食物
-    food_list = generate_food(snake_list, min(level, 10))
-
-    while not game_over:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                game_over = True
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_LEFT and x1_change != snake_block:
-                    x1_change = -snake_block
-                    y1_change = 0
-                elif event.key == pygame.K_RIGHT and x1_change != -snake_block:
-                    x1_change = snake_block
-                    y1_change = 0
-                elif event.key == pygame.K_UP and y1_change != snake_block:
-                    y1_change = -snake_block
-                    x1_change = 0
-                elif event.key == pygame.K_DOWN and y1_change != -snake_block:
-                    y1_change = snake_block
-                    x1_change = 0
-                elif event.key == pygame.K_p:  # 按下P键时切换暂停状态
-                    paused = not paused  # 切换暂停标志
-
-        if not paused:  # 只有当游戏未暂停时才执行游戏逻辑
-            # 更新贪吃蛇的位置
-            x1, y1, game_over = update_snake_position(snake_list, x1, y1, x1_change, y1_change)
+                # 如果所有食物都被吃完了，重新生成食物
+                if len(self.food.foods) == 0:
+                    self.food = Food(self.snake.body, self.block_size, self.play_area_width, self.window_height, self.scoreboard.level)
 
             # 绘制背景
-            window.fill(black)
-
-            # 绘制网格
-            draw_grid()
-
-            # 绘制食物
-            for food in food_list:
-                pygame.draw.rect(window, red, [food[0], food[1], snake_block, snake_block])
-
-            # 绘制贪吃蛇
-            draw_snake(snake_list)
-
-            # 显示控制信息
-            display_controls()
-
-            # 显示得分和等级
-            display_score_and_level(high_score_all_time)
-
-            # 更新屏幕
-            pygame.display.update()
-
-            # 检查是否吃到食物
-            for i, food in enumerate(food_list):
-                if x1 == food[0] and y1 == food[1]:
-                    food_list.pop(i)
-                    snake_length += 1
-                    score += 10
-                    if score % 100 == 0:
-                        level += 1
-                        snake_speed += 1  # 增加速度以增加难度
-                    break
-
-            # 生成新的食物
-            if len(food_list) < min(level, 10):
-                new_foods = generate_food(snake_list, min(level, 10) - len(food_list))
-                food_list.extend(new_foods)
-
-            # 控制游戏速度
-            clock.tick(snake_speed)
-
-        else:  # 当游戏暂停时
-            # 清屏并绘制背景
-            window.fill(black)
-
-            # 绘制网格、控制信息、得分和等级
-            draw_grid()
-            display_controls()
-            display_score_and_level(high_score_all_time)
+            self.window.fill(black)
+            pygame.draw.rect(self.window, black, (self.play_area_width, 0, self.info_panel_width, self.window_height))  # 信息面板背景
+            self.draw_grid()
+            self.display_controls()
+            self.display_score_and_level()
 
             # 绘制食物
-            for food in food_list:
-                pygame.draw.rect(window, red, [food[0], food[1], snake_block, snake_block])
+            for food_pos in self.food.foods:
+                pygame.draw.rect(self.window, red, [food_pos[0], food_pos[1], self.block_size, self.block_size])
 
             # 绘制贪吃蛇
-            draw_snake(snake_list)
+            for segment in self.snake.body:
+                pygame.draw.rect(self.window, white, [segment[0], segment[1], self.block_size, self.block_size])
 
-            # 显示“PAUSED”提示
-            font = pygame.font.Font(None, 48)
-            pause_text = font.render("PAUSED", True, white)
-            window.blit(pause_text, (window_width // 2 - 50, window_height // 2 - 24))  # 屏幕中心显示
+            # 当游戏暂停时显示"paused"
+            if self.paused:
+                font = pygame.font.Font(None, 48)
+                paused_text = font.render("Paused", True, white)
+                self.window.blit(paused_text, (self.play_area_width // 2 - 50, self.window_height // 2 - 50))
 
-            # 更新屏幕
             pygame.display.update()
+            self.clock.tick(self.snake_speed)
 
-            # 在暂停状态下不更新游戏速度
-            clock.tick(1)  # 减慢帧率，防止闪烁
+            if self.game_over:
+                self.handle_game_over()
 
+    def handle_game_over(self):
+        # 游戏结束后的处理
+        font = pygame.font.Font(None, 48)
+        game_over_text = font.render("Game Over", True, white)
+        restart_text = font.render("Press R to Restart | Press Q to Exit", True, white)
+        waiting_for_input = True
 
-def game_over_screen():
-    global score, high_score_all_time, running
-
-    # 显示游戏结束信息
-    font = pygame.font.Font(None, 48)  # 使用具体的字体名称
-    game_over_text = font.render("Game Over", True, white)
-    restart_text = font.render("Press R to Restart | Press Q to Exit", True, white)
-    waiting_for_input = True
-
-    while waiting_for_input:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                waiting_for_input = False
-                running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_r:  # 按R键重新开始游戏
+        while waiting_for_input:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
                     waiting_for_input = False
-                    # 重置游戏状态
-                    reset_game()
-                elif event.key == pygame.K_q:  # 按Q键退出游戏
-                    waiting_for_input = False
-                    running = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:  # 按R键重新开始游戏
+                        self.reset_game()
+                        self.game_over = False
+                        waiting_for_input = False
+                    elif event.key == pygame.K_q:  # 按Q键退出游戏
+                        waiting_for_input = False
+                        self.save_score_to_file(self.scoreboard.score)
+                        pygame.quit()
+                        exit()
 
-        # 清屏并绘制背景
-        window.fill(black)
-        draw_grid()
-        display_controls()
-        display_score_and_level(high_score_all_time)
+            # 绘制游戏结束信息
+            self.window.fill(black)
+            pygame.draw.rect(self.window, black, (self.play_area_width, 0, self.info_panel_width, self.window_height))  # 信息面板背景
+            self.draw_grid()
+            self.display_controls()
+            self.display_score_and_level()
+            self.window.blit(game_over_text, (self.play_area_width // 2 - 100, self.window_height // 2 - 50))
+            self.window.blit(restart_text, (self.play_area_width // 2 - 100, self.window_height // 2 + 10))
 
-        # 显示游戏结束信息
-        window.blit(game_over_text, (window_width // 2 - 100, window_height // 2 - 50))
-        window.blit(restart_text, (window_width // 2 - 100, window_height // 2 + 10))
+            pygame.display.update()
+            self.clock.tick(10)  # 减慢帧率，防止闪烁
 
-        # 更新屏幕
-        pygame.display.update()
+    def reset_game(self):
+        self.snake = Snake(self.round_to_grid(play_area_width // 2), self.round_to_grid(window_height // 2), self.block_size)
+        self.scoreboard = Scoreboard(self.get_high_score_from_file())
+        self.food = Food(self.snake.body, self.block_size, self.play_area_width, self.window_height, self.scoreboard.level)
+        self.game_over = False
+        self.paused = False
+        self.started = False  # 重置游戏开始标志
 
-        # 控制游戏速度
-        clock.tick(10)  # 减慢帧率，防止闪烁
+    def get_high_score_from_file(self):
+        try:
+            with open('scores_for_snake.txt', 'r') as file:
+                scores = [int(line.strip()) for line in file.readlines()]
+                return max(scores, default=0)
+        except FileNotFoundError:
+            return 0
 
+    def save_score_to_file(self, score):
+        with open('scores_for_snake.txt', 'a') as file:
+            file.write(f"{score}\n")
 
-def reset_game():
-    global x1, y1, x1_change, y1_change, snake_list, snake_length, score, level, game_over, paused, food_list
-    x1 = round(random.randrange(0, window_width - 200 - snake_block) / 30.0) * 30.0
-    y1 = round(random.randrange(0, window_height - snake_block) / 30.0) * 30.0
-    x1_change = 0
-    y1_change = 0
-    food_list = generate_food(snake_list, min(level, 10))
-    score = 0
-    level = 1
-    snake_list = [[x1, y1]]
-    snake_length = 1
-    game_over = False
-    paused = False
-
-
-def display_initial_screen():
-    initial_texts = [
-        "Welcome to Snake Game",
-        "Press Space to Start"
-    ]
-    font = pygame.font.Font(None, 48)
-
-    waiting_for_input = True
-    while waiting_for_input:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:  # 按空格键开始游戏
-                    waiting_for_input = False
-
-        window.fill(black)
-
-        # 绘制多行文字
-        for i, text in enumerate(initial_texts):
-            text_surface = font.render(text, True, white)
-            text_rect = text_surface.get_rect(center=(window_width // 2, window_height // 2 + i * 50))
-            window.blit(text_surface, text_rect)
-
-        pygame.display.update()
-        clock.tick(10)  # 减慢帧率，防止闪烁
-
-    # 返回 True 表示用户已经按下空格键
-    return True
-
-
-high_score_all_time = get_high_score_from_file()  # 从文件中读取历史最高分
-
-# 主循环
-running = True
-
-# 显示初始屏幕
-if display_initial_screen():
-    game_loop()  # 用户按下空格键后开始游戏循环
-
-# 游戏结束后处理
-if game_over:
-    game_over_screen()
+if __name__ == '__main__':
+    game = Game(window, play_area_width, window_height, info_panel_width, 30, 10)
+    game.run()
